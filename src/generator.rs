@@ -116,19 +116,14 @@ impl Generator {
         chart_most_recent: &SeatingChart,
         chart_previous: &SeatingChart,
     ) -> Result<SeatingChart, String> {
-        println!("{}", chart_previous.assignments.keys().len());
-        println!("{}", chart_most_recent.assignments.keys().len());
-        let all_people = {
-            let mut people: Vec<PersonId> = chart_most_recent
-                .assignments
-                .keys()
-                .chain(chart_previous.assignments.keys())
-                .cloned()
-                .collect();
-            people.sort();
-            people.dedup();
-            people
-        };
+        let all_people: Vec<PersonId> = chart_most_recent
+            .assignments
+            .keys()
+            .chain(chart_previous.assignments.keys())
+            .cloned()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
 
         if all_people.is_empty() {
             return Err("no people to assign".to_string());
