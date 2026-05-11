@@ -1,5 +1,5 @@
+use rand::prelude::IndexedRandom;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -11,12 +11,13 @@ pub enum Zone {
 }
 
 impl Zone {
+    #[allow(dead_code)]
     pub fn all() -> [Zone; 4] {
         [Zone::Zone1, Zone::Zone2a, Zone::Zone2b, Zone::Zone3]
     }
 }
 
-pub type PersonId = usize;
+pub type PersonId = String;
 
 #[derive(Debug, Clone)]
 pub struct SeatingChart {
@@ -28,12 +29,13 @@ impl SeatingChart {
         Self { assignments }
     }
 
-    pub fn get(&self, person: PersonId) -> Option<Zone> {
-        self.assignments.get(&person).copied()
+    pub fn get(&self, person: &str) -> Option<Zone> {
+        self.assignments.get(person).copied()
     }
 
+    #[allow(dead_code)]
     pub fn people(&self) -> Vec<PersonId> {
-        let mut people: Vec<PersonId> = self.assignments.keys().copied().collect();
+        let mut people: Vec<PersonId> = self.assignments.keys().cloned().collect();
         people.sort();
         people
     }
@@ -82,7 +84,7 @@ impl Generator {
         &self,
         person_options: &[(PersonId, Vec<Zone>)],
     ) -> Option<HashMap<PersonId, Zone>> {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let mut remaining = self.capacities.clone();
         let mut result = HashMap::new();
 
@@ -103,7 +105,7 @@ impl Generator {
 
             let chosen = available.choose(&mut rng).unwrap();
             *remaining.get_mut(chosen).unwrap() -= 1;
-            result.insert(*person, *chosen);
+            result.insert(person.clone(), *chosen);
         }
 
         Some(result)
@@ -114,12 +116,14 @@ impl Generator {
         chart_most_recent: &SeatingChart,
         chart_previous: &SeatingChart,
     ) -> Result<SeatingChart, String> {
+        println!("{}", chart_previous.assignments.keys().len());
+        println!("{}", chart_most_recent.assignments.keys().len());
         let all_people = {
             let mut people: Vec<PersonId> = chart_most_recent
                 .assignments
                 .keys()
                 .chain(chart_previous.assignments.keys())
-                .copied()
+                .cloned()
                 .collect();
             people.sort();
             people.dedup();
@@ -141,14 +145,14 @@ impl Generator {
 
         let person_options: Vec<(PersonId, Vec<Zone>)> = all_people
             .iter()
-            .map(|&p| {
+            .map(|p| {
                 let prev1 = chart_most_recent.get(p);
                 let prev2 = chart_previous.get(p);
-                (p, self.allowed_zones(prev1, prev2))
+                (p.clone(), self.allowed_zones(prev1, prev2))
             })
             .collect();
 
-        for &(person, ref allowed) in &person_options {
+        for (person, allowed) in &person_options {
             if allowed.is_empty() {
                 return Err(format!("person {} has no allowed zones", person));
             }
@@ -168,8 +172,12 @@ impl Generator {
 mod tests {
     use super::*;
 
-    fn make_chart(data: Vec<(PersonId, Zone)>) -> SeatingChart {
-        SeatingChart::new(data.into_iter().collect())
+    fn id(s: &str) -> PersonId {
+        s.to_string()
+    }
+
+    fn make_chart(data: Vec<(&str, Zone)>) -> SeatingChart {
+        SeatingChart::new(data.into_iter().map(|(n, z)| (id(n), z)).collect())
     }
 
     fn default_capacities() -> HashMap<Zone, usize> {
@@ -191,7 +199,7 @@ mod tests {
     #[test]
     fn test_capacity_mismatch() {
         let g = Generator::new(HashMap::from([(Zone::Zone3, 1)]));
-        let chart = make_chart(vec![(0, Zone::Zone3), (1, Zone::Zone3)]);
+        let chart = make_chart(vec![("p0", Zone::Zone3), ("p1", Zone::Zone3)]);
         assert!(g.generate(&chart, &chart).is_err());
     }
 
@@ -203,8 +211,8 @@ mod tests {
             (Zone::Zone2b, 0),
             (Zone::Zone3, 0),
         ]));
-        let recent = make_chart(vec![(0, Zone::Zone1)]);
-        let prev = make_chart(vec![(0, Zone::Zone3)]);
+        let recent = make_chart(vec![("p0", Zone::Zone1)]);
+        let prev = make_chart(vec![("p0", Zone::Zone3)]);
         assert!(g.generate(&recent, &prev).is_err());
     }
 
@@ -216,12 +224,10 @@ mod tests {
             (Zone::Zone2b, 0),
             (Zone::Zone3, 1),
         ]));
-        // Person 0 was in Zone1 last time, cannot be again -> must go to Zone3
-        // Person 1 was in Zone3 last time, can go to Zone1
-        let recent = make_chart(vec![(0, Zone::Zone1), (1, Zone::Zone3)]);
-        let prev = make_chart(vec![(0, Zone::Zone3), (1, Zone::Zone3)]);
+        let recent = make_chart(vec![("p0", Zone::Zone1), ("p1", Zone::Zone3)]);
+        let prev = make_chart(vec![("p0", Zone::Zone3), ("p1", Zone::Zone3)]);
         let result = g.generate(&recent, &prev).unwrap();
-        assert_ne!(result.get(0), Some(Zone::Zone1));
+        assert_ne!(result.get("p0"), Some(Zone::Zone1));
     }
 
     #[test]
@@ -232,13 +238,11 @@ mod tests {
             (Zone::Zone2b, 1),
             (Zone::Zone3, 0),
         ]));
-        // Person 0 was in 2a, can't be in 2a again
-        // Person 1 was in 2b, can't be in 2b again
-        let recent = make_chart(vec![(0, Zone::Zone2a), (1, Zone::Zone2b)]);
-        let prev = make_chart(vec![(0, Zone::Zone3), (1, Zone::Zone3)]);
+        let recent = make_chart(vec![("p0", Zone::Zone2a), ("p1", Zone::Zone2b)]);
+        let prev = make_chart(vec![("p0", Zone::Zone3), ("p1", Zone::Zone3)]);
         let result = g.generate(&recent, &prev).unwrap();
-        assert_ne!(result.get(0), Some(Zone::Zone2a));
-        assert_ne!(result.get(1), Some(Zone::Zone2b));
+        assert_ne!(result.get("p0"), Some(Zone::Zone2a));
+        assert_ne!(result.get("p1"), Some(Zone::Zone2b));
     }
 
     #[test]
@@ -249,11 +253,13 @@ mod tests {
             (Zone::Zone2b, 0),
             (Zone::Zone3, 0),
         ]));
-        // Person 0: was in 2a then 2b -> cannot be in 2a or 2b, only Zone1 possible
-        let recent = make_chart(vec![(0, Zone::Zone2b)]);
-        let prev = make_chart(vec![(0, Zone::Zone2a)]);
+        let recent = make_chart(vec![("p0", Zone::Zone2b)]);
+        let prev = make_chart(vec![("p0", Zone::Zone2a)]);
         let result = g.generate(&recent, &prev).unwrap();
-        assert!(!matches!(result.get(0), Some(Zone::Zone2a | Zone::Zone2b)));
+        assert!(!matches!(
+            result.get("p0"),
+            Some(Zone::Zone2a | Zone::Zone2b)
+        ));
     }
 
     #[test]
@@ -264,12 +270,11 @@ mod tests {
             (Zone::Zone2b, 1),
             (Zone::Zone3, 0),
         ]));
-        // Person 0: was in 2a, previous was Zone3 -> allowed in 2b (only 1 consecutive in combined)
-        let recent = make_chart(vec![(0, Zone::Zone2a), (1, Zone::Zone2b)]);
-        let prev = make_chart(vec![(0, Zone::Zone3), (1, Zone::Zone3)]);
+        let recent = make_chart(vec![("p0", Zone::Zone2a), ("p1", Zone::Zone2b)]);
+        let prev = make_chart(vec![("p0", Zone::Zone3), ("p1", Zone::Zone3)]);
         let result = g.generate(&recent, &prev).unwrap();
-        assert_ne!(result.get(0), Some(Zone::Zone2a));
-        assert_ne!(result.get(1), Some(Zone::Zone2b));
+        assert_ne!(result.get("p0"), Some(Zone::Zone2a));
+        assert_ne!(result.get("p1"), Some(Zone::Zone2b));
     }
 
     #[test]
@@ -280,10 +285,10 @@ mod tests {
             (Zone::Zone2b, 0),
             (Zone::Zone3, 1),
         ]));
-        let recent = make_chart(vec![(0, Zone::Zone3)]);
-        let prev = make_chart(vec![(0, Zone::Zone3)]);
+        let recent = make_chart(vec![("p0", Zone::Zone3)]);
+        let prev = make_chart(vec![("p0", Zone::Zone3)]);
         let result = g.generate(&recent, &prev).unwrap();
-        assert_eq!(result.get(0), Some(Zone::Zone3));
+        assert_eq!(result.get("p0"), Some(Zone::Zone3));
     }
 
     #[test]
@@ -291,29 +296,29 @@ mod tests {
         let g = Generator::new(default_capacities());
 
         let recent = make_chart(vec![
-            (0, Zone::Zone1),
-            (1, Zone::Zone1),
-            (2, Zone::Zone2a),
-            (3, Zone::Zone2a),
-            (4, Zone::Zone2b),
-            (5, Zone::Zone2b),
-            (6, Zone::Zone3),
-            (7, Zone::Zone3),
-            (8, Zone::Zone3),
-            (9, Zone::Zone3),
+            ("p0", Zone::Zone1),
+            ("p1", Zone::Zone1),
+            ("p2", Zone::Zone2a),
+            ("p3", Zone::Zone2a),
+            ("p4", Zone::Zone2b),
+            ("p5", Zone::Zone2b),
+            ("p6", Zone::Zone3),
+            ("p7", Zone::Zone3),
+            ("p8", Zone::Zone3),
+            ("p9", Zone::Zone3),
         ]);
 
         let prev = make_chart(vec![
-            (0, Zone::Zone3),
-            (1, Zone::Zone3),
-            (2, Zone::Zone3),
-            (3, Zone::Zone3),
-            (4, Zone::Zone3),
-            (5, Zone::Zone3),
-            (6, Zone::Zone1),
-            (7, Zone::Zone2a),
-            (8, Zone::Zone2b),
-            (9, Zone::Zone3),
+            ("p0", Zone::Zone3),
+            ("p1", Zone::Zone3),
+            ("p2", Zone::Zone3),
+            ("p3", Zone::Zone3),
+            ("p4", Zone::Zone3),
+            ("p5", Zone::Zone3),
+            ("p6", Zone::Zone1),
+            ("p7", Zone::Zone2a),
+            ("p8", Zone::Zone2b),
+            ("p9", Zone::Zone3),
         ]);
 
         let result = g.generate(&recent, &prev).unwrap();
@@ -330,15 +335,25 @@ mod tests {
         assert_eq!(zone_counts.get(&Zone::Zone3).copied().unwrap_or(0), 4);
 
         for (person, zone) in &result.assignments {
-            let prev1 = recent.get(*person);
-            let prev2 = prev.get(*person);
+            let prev1 = recent.get(person);
+            let prev2 = prev.get(person);
 
             match zone {
                 Zone::Zone1 => {
-                    assert_ne!(prev1, Some(Zone::Zone1), "person {} violated Zone1 consecutive rule", person);
+                    assert_ne!(
+                        prev1,
+                        Some(Zone::Zone1),
+                        "person {} violated Zone1 consecutive rule",
+                        person
+                    );
                 }
                 Zone::Zone2a => {
-                    assert_ne!(prev1, Some(Zone::Zone2a), "person {} violated Zone2a consecutive rule", person);
+                    assert_ne!(
+                        prev1,
+                        Some(Zone::Zone2a),
+                        "person {} violated Zone2a consecutive rule",
+                        person
+                    );
                     if let (Some(p1), Some(p2)) = (prev1, prev2) {
                         let p1_in_2 = matches!(p1, Zone::Zone2a | Zone::Zone2b);
                         let p2_in_2 = matches!(p2, Zone::Zone2a | Zone::Zone2b);
@@ -350,7 +365,12 @@ mod tests {
                     }
                 }
                 Zone::Zone2b => {
-                    assert_ne!(prev1, Some(Zone::Zone2b), "person {} violated Zone2b consecutive rule", person);
+                    assert_ne!(
+                        prev1,
+                        Some(Zone::Zone2b),
+                        "person {} violated Zone2b consecutive rule",
+                        person
+                    );
                     if let (Some(p1), Some(p2)) = (prev1, prev2) {
                         let p1_in_2 = matches!(p1, Zone::Zone2a | Zone::Zone2b);
                         let p2_in_2 = matches!(p2, Zone::Zone2a | Zone::Zone2b);
@@ -374,10 +394,9 @@ mod tests {
             (Zone::Zone2b, 0),
             (Zone::Zone3, 0),
         ]));
-        // Person 0 only appears in previous chart, not recent -> treated as prev1=None
         let recent = make_chart(vec![]);
-        let prev = make_chart(vec![(0, Zone::Zone1)]);
+        let prev = make_chart(vec![("p0", Zone::Zone1)]);
         let result = g.generate(&recent, &prev).unwrap();
-        assert_eq!(result.get(0), Some(Zone::Zone1));
+        assert_eq!(result.get("p0"), Some(Zone::Zone1));
     }
 }
