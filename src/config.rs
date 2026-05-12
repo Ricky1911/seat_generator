@@ -3,19 +3,19 @@ use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub template_path: String,
-    pub history1_path: String,
-    pub history2_path: String,
-    pub output_path: String,
+    pub template_path: PathBuf,
+    pub history1_path: PathBuf,
+    pub history2_path: PathBuf,
+    pub output_path: PathBuf,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            template_path: String::new(),
-            history1_path: String::new(),
-            history2_path: String::new(),
-            output_path: String::new(),
+            template_path: PathBuf::new(),
+            history1_path: PathBuf::new(),
+            history2_path: PathBuf::new(),
+            output_path: PathBuf::new(),
         }
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use rand::prelude::*;
 use umya_spreadsheet::{self, reader, writer};
@@ -28,12 +29,12 @@ impl ZoneCellConfig {
         ])
     }
 
-    pub fn from_template(path: &str) -> Result<Self, String> {
+    pub fn from_template(path: &Path) -> Result<Self, String> {
         let book = reader::xlsx::read(path)
-            .map_err(|e| format!("failed to read template '{}': {}", path, e))?;
+            .map_err(|e| format!("failed to read template '{}': {}", path.display(), e))?;
         let sheet = book
             .get_sheet(&0)
-            .ok_or_else(|| format!("no sheet in '{}'", path))?;
+            .ok_or_else(|| format!("no sheet in '{}'", path.display()))?;
 
         let max_row = sheet.get_highest_row();
         let max_col = sheet.get_highest_column();
@@ -79,13 +80,13 @@ impl ZoneCellConfig {
     }
 }
 
-pub fn read_chart(path: &str, config: &ZoneCellConfig) -> Result<SeatingChart, String> {
-    let book =
-        reader::xlsx::read(path).map_err(|e| format!("failed to read '{}': {}", path, e))?;
+pub fn read_chart(path: &Path, config: &ZoneCellConfig) -> Result<SeatingChart, String> {
+    let book = reader::xlsx::read(path)
+        .map_err(|e| format!("failed to read '{}': {}", path.display(), e))?;
 
     let sheet = book
         .get_sheet(&0)
-        .ok_or_else(|| format!("no sheet found in '{}'", path))?;
+        .ok_or_else(|| format!("no sheet found in '{}'", path.display()))?;
 
     let mut assignments = HashMap::new();
 
@@ -103,14 +104,19 @@ pub fn read_chart(path: &str, config: &ZoneCellConfig) -> Result<SeatingChart, S
 }
 
 pub fn write_chart(
-    template_path: &str,
-    output_path: &str,
+    template_path: &Path,
+    output_path: &Path,
     chart: &SeatingChart,
     config: &ZoneCellConfig,
 ) -> Result<(), String> {
     let mut rng = rand::rng();
-    let mut book = reader::xlsx::read(template_path)
-        .map_err(|e| format!("failed to read template '{}': {}", template_path, e))?;
+    let mut book = reader::xlsx::read(template_path).map_err(|e| {
+        format!(
+            "failed to read template '{}': {}",
+            template_path.display(),
+            e
+        )
+    })?;
 
     let sheet = book
         .get_sheet_mut(&0)
@@ -135,7 +141,7 @@ pub fn write_chart(
     }
 
     writer::xlsx::write(&book, output_path)
-        .map_err(|e| format!("failed to write '{}': {}", output_path, e))?;
+        .map_err(|e| format!("failed to write '{}': {}", output_path.display(), e))?;
 
     Ok(())
 }

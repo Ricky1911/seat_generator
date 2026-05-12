@@ -1,14 +1,27 @@
-use eframe::egui;
-use crate::excel_io::{read_chart, write_chart, ZoneCellConfig};
+use std::path::{Path, PathBuf};
+
+use crate::excel_io::{ZoneCellConfig, read_chart, write_chart};
 use crate::generator::Generator;
+use eframe::egui;
+
+#[derive(Clone)]
+pub enum AppState {
+    Ready,
+    MissingPaths,
+    TemplateError(String),
+    History1Error(String),
+    History2Error(String),
+    GenerationError(String),
+    WriteError(String),
+    Done(PathBuf),
+}
 
 pub struct SeatGeneratorApp {
-    template_path: String,
-    history1_path: String,
-    history2_path: String,
-    output_path: String,
-    status: String,
-    status_is_error: bool,
+    template_path: PathBuf,
+    history1_path: PathBuf,
+    history2_path: PathBuf,
+    output_path: PathBuf,
+    state: AppState,
 }
 
 impl SeatGeneratorApp {
@@ -19,8 +32,7 @@ impl SeatGeneratorApp {
             history1_path: config.history1_path,
             history2_path: config.history2_path,
             output_path: config.output_path,
-            status: "Ready".to_string(),
-            status_is_error: false,
+            state: AppState::Ready,
         }
     }
 
@@ -34,42 +46,40 @@ impl SeatGeneratorApp {
         .save();
     }
 
-    fn pick_excel_file(current: &str) -> Option<String> {
+    fn pick_excel_file(current: &Path) -> Option<PathBuf> {
         let mut dialog = rfd::FileDialog::new().add_filter("Excel", &["xlsx"]);
-        if let Some(parent) = std::path::Path::new(current).parent() {
-            if parent.exists() {
+        if let Some(parent) = std::path::Path::new(current).parent()
+            && parent.exists() {
                 dialog = dialog.set_directory(parent);
             }
-        }
-        dialog.pick_file().map(|p| p.to_string_lossy().to_string())
+        dialog.pick_file()
     }
 
-    fn pick_save_file(current: &str) -> Option<String> {
+    fn pick_save_file(current: &Path) -> Option<PathBuf> {
         let mut dialog = rfd::FileDialog::new()
             .add_filter("Excel", &["xlsx"])
             .set_file_name("output.xlsx");
-        if let Some(parent) = std::path::Path::new(current).parent() {
-            if parent.exists() {
+        if let Some(parent) = std::path::Path::new(current).parent()
+            && parent.exists() {
                 dialog = dialog.set_directory(parent);
             }
-        }
-        dialog.save_file().map(|p| p.to_string_lossy().to_string())
+        dialog.save_file()
     }
 
     fn run_generation(&mut self) {
-        if self.template_path.is_empty() || self.history1_path.is_empty()
-            || self.history2_path.is_empty() || self.output_path.is_empty()
+        if self.template_path.is_empty()
+            || self.history1_path.is_empty()
+            || self.history2_path.is_empty()
+            || self.output_path.is_empty()
         {
-            self.status = "Error: all four file paths must be specified".to_string();
-            self.status_is_error = true;
+            self.state = AppState::MissingPaths;
             return;
         }
 
         let config = match ZoneCellConfig::from_template(&self.template_path) {
             Ok(c) => c,
             Err(e) => {
-                self.status = format!("Failed to read template: {}", e);
-                self.status_is_error = true;
+                self.state = AppState::TemplateError(e.to_string());
                 return;
             }
         };
@@ -79,8 +89,7 @@ impl SeatGeneratorApp {
         let chart1 = match read_chart(&self.history1_path, &config) {
             Ok(c) => c,
             Err(e) => {
-                self.status = format!("Failed to read history 1: {}", e);
-                self.status_is_error = true;
+                self.state = AppState::History1Error(e.to_string());
                 return;
             }
         };
@@ -88,8 +97,7 @@ impl SeatGeneratorApp {
         let chart2 = match read_chart(&self.history2_path, &config) {
             Ok(c) => c,
             Err(e) => {
-                self.status = format!("Failed to read history 2: {}", e);
-                self.status_is_error = true;
+                self.state = AppState::History2Error(e.to_string());
                 return;
             }
         };
@@ -98,19 +106,16 @@ impl SeatGeneratorApp {
             Ok(chart) => {
                 match write_chart(&self.template_path, &self.output_path, &chart, &config) {
                     Ok(()) => {
-                        self.status = format!("Done -> {}", self.output_path);
-                        self.status_is_error = false;
+                        self.state = AppState::Done(self.output_path.clone());
                         self.save_config();
                     }
                     Err(e) => {
-                        self.status = format!("Failed to write output: {}", e);
-                        self.status_is_error = true;
+                        self.state = AppState::WriteError(e.to_string());
                     }
                 }
             }
             Err(e) => {
-                self.status = format!("Generation failed: {}", e);
-                self.status_is_error = true;
+                self.state = AppState::GenerationError(e.to_string());
             }
         }
     }
@@ -166,7 +171,7 @@ impl eframe::App for SeatGeneratorApp {
                     .show(ui, |ui| {
                         ui.label("Template:");
                         ui.add(
-                            egui::TextEdit::singleline(&mut self.template_path)
+                            egui::TextEdit::singleline(&mut self.template_path.to_string_lossy())
                                 .desired_width(f32::INFINITY),
                         );
                         if ui.button("Browse...").clicked() {
@@ -179,7 +184,7 @@ impl eframe::App for SeatGeneratorApp {
 
                         ui.label("History 1:");
                         ui.add(
-                            egui::TextEdit::singleline(&mut self.history1_path)
+                            egui::TextEdit::singleline(&mut self.history1_path.to_string_lossy())
                                 .desired_width(f32::INFINITY),
                         );
                         if ui.button("Browse...").clicked() {
@@ -192,7 +197,7 @@ impl eframe::App for SeatGeneratorApp {
 
                         ui.label("History 2:");
                         ui.add(
-                            egui::TextEdit::singleline(&mut self.history2_path)
+                            egui::TextEdit::singleline(&mut self.history2_path.to_string_lossy())
                                 .desired_width(f32::INFINITY),
                         );
                         if ui.button("Browse...").clicked() {
@@ -205,7 +210,7 @@ impl eframe::App for SeatGeneratorApp {
 
                         ui.label("Output:");
                         ui.add(
-                            egui::TextEdit::singleline(&mut self.output_path)
+                            egui::TextEdit::singleline(&mut self.output_path.to_string_lossy())
                                 .desired_width(f32::INFINITY),
                         );
                         if ui.button("Save As...").clicked() {
@@ -221,8 +226,7 @@ impl eframe::App for SeatGeneratorApp {
             ui.add_space(12.0);
 
             ui.vertical_centered(|ui| {
-                let button = egui::Button::new("Generate")
-                    .min_size(egui::vec2(160.0, 36.0));
+                let button = egui::Button::new("Generate").min_size(egui::vec2(160.0, 36.0));
                 if ui.add(button).clicked() {
                     self.run_generation();
                 }
@@ -231,10 +235,28 @@ impl eframe::App for SeatGeneratorApp {
             ui.add_space(8.0);
             ui.separator();
 
-            if self.status_is_error {
-                ui.colored_label(egui::Color32::from_rgb(220, 60, 60), &self.status);
-            } else {
-                ui.label(&self.status);
+            let red = egui::Color32::from_rgb(220, 60, 60);
+            match &self.state {
+                AppState::Ready => ui.label("Ready"),
+                AppState::MissingPaths => {
+                    ui.colored_label(red, "Error: all four file paths must be specified")
+                }
+                AppState::TemplateError(e) => {
+                    ui.colored_label(red, format!("Failed to read template: {}", e))
+                }
+                AppState::History1Error(e) => {
+                    ui.colored_label(red, format!("Failed to read history 1: {}", e))
+                }
+                AppState::History2Error(e) => {
+                    ui.colored_label(red, format!("Failed to read history 2: {}", e))
+                }
+                AppState::GenerationError(e) => {
+                    ui.colored_label(red, format!("Generation failed: {}", e))
+                }
+                AppState::WriteError(e) => {
+                    ui.colored_label(red, format!("Failed to write output: {}", e))
+                }
+                AppState::Done(p) => ui.label(format!("Done -> {}", p.display())),
             }
         });
     }

@@ -1,3 +1,6 @@
+#![feature(path_is_empty)]
+use std::path::Path;
+
 mod config;
 mod excel_io;
 mod generator;
@@ -16,18 +19,25 @@ fn run_cli() {
     use excel_io::{ZoneCellConfig, read_chart, write_chart};
     use generator::Generator;
 
-    let config =
-        ZoneCellConfig::from_template("template.xlsx").expect("failed to read template.xlsx");
+    let config = ZoneCellConfig::from_template(Path::new("template.xlsx"))
+        .expect("failed to read template.xlsx");
 
     let generator = Generator::new(config.to_capacities());
 
-    let chart1 = read_chart("history1.xlsx", &config).expect("failed to read history1.xlsx");
-    let chart2 = read_chart("history2.xlsx", &config).expect("failed to read history2.xlsx");
+    let chart1 =
+        read_chart(Path::new("history1.xlsx"), &config).expect("failed to read history1.xlsx");
+    let chart2 =
+        read_chart(Path::new("history2.xlsx"), &config).expect("failed to read history2.xlsx");
 
     match generator.generate(&chart1, &chart2) {
         Ok(chart) => {
-            write_chart("template.xlsx", "output.xlsx", &chart, &config)
-                .expect("failed to write output.xlsx");
+            write_chart(
+                Path::new("template.xlsx"),
+                Path::new("output.xlsx"),
+                &chart,
+                &config,
+            )
+            .expect("failed to write output.xlsx");
             println!("done -> output.xlsx");
         }
         Err(e) => eprintln!("error: {}", e),
