@@ -117,11 +117,11 @@ impl SeatGeneratorApp {
 }
 
 impl eframe::App for SeatGeneratorApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::SidePanel::right("info_panel")
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::Panel::right("info_panel")
             .resizable(false)
-            .min_width(200.0)
-            .show(ctx, |ui| {
+            .min_size(200.0)
+            .show_inside(ui, |ui| {
                 ui.heading("File Info");
                 ui.separator();
                 ui.add_space(6.0);
@@ -153,7 +153,7 @@ impl eframe::App for SeatGeneratorApp {
                 ui.label("  seating chart (.xlsx).");
             });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.heading("Seat Generator");
             ui.separator();
 
@@ -170,7 +170,7 @@ impl eframe::App for SeatGeneratorApp {
                                 .desired_width(f32::INFINITY),
                         );
                         if ui.button("Browse...").clicked() {
-                            ctx.request_repaint();
+                            ui.ctx().request_repaint();
                             if let Some(path) = Self::pick_excel_file(&self.template_path) {
                                 self.template_path = path;
                             }
@@ -183,7 +183,7 @@ impl eframe::App for SeatGeneratorApp {
                                 .desired_width(f32::INFINITY),
                         );
                         if ui.button("Browse...").clicked() {
-                            ctx.request_repaint();
+                            ui.ctx().request_repaint();
                             if let Some(path) = Self::pick_excel_file(&self.history1_path) {
                                 self.history1_path = path;
                             }
@@ -196,7 +196,7 @@ impl eframe::App for SeatGeneratorApp {
                                 .desired_width(f32::INFINITY),
                         );
                         if ui.button("Browse...").clicked() {
-                            ctx.request_repaint();
+                            ui.ctx().request_repaint();
                             if let Some(path) = Self::pick_excel_file(&self.history2_path) {
                                 self.history2_path = path;
                             }
@@ -209,7 +209,7 @@ impl eframe::App for SeatGeneratorApp {
                                 .desired_width(f32::INFINITY),
                         );
                         if ui.button("Save As...").clicked() {
-                            ctx.request_repaint();
+                            ui.ctx().request_repaint();
                             if let Some(path) = Self::pick_save_file(&self.output_path) {
                                 self.output_path = path;
                             }
