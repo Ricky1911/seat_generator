@@ -5,6 +5,7 @@ mod config;
 mod excel_io;
 mod generator;
 mod gui;
+mod server;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -18,6 +19,16 @@ fn main() {
 fn run_cli() {
     use excel_io::{ZoneCellConfig, read_chart, write_chart};
     use generator::Generator;
+
+    if server::try_fetch_from_server(
+        Path::new("template.xlsx"),
+        Path::new("history1.xlsx"),
+        Path::new("history2.xlsx"),
+        Path::new("output.xlsx"),
+    ) {
+        println!("done -> output.xlsx");
+        return;
+    }
 
     let config = ZoneCellConfig::from_template(Path::new("template.xlsx"))
         .expect("failed to read template.xlsx");

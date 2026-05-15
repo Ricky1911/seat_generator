@@ -76,6 +76,17 @@ impl SeatGeneratorApp {
             return;
         }
 
+        if crate::server::try_fetch_from_server(
+            &self.template_path,
+            &self.history1_path,
+            &self.history2_path,
+            &self.output_path,
+        ) {
+            self.state = AppState::Done(self.output_path.clone());
+            self.save_config();
+            return;
+        }
+
         let config = match ZoneCellConfig::from_template(&self.template_path) {
             Ok(c) => c,
             Err(e) => {
